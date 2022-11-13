@@ -9,6 +9,7 @@ class CL_Command{
     static const uint8_t MAX_NEXTED_DEPTH   =       10;
     static const uint8_t MAX_HELP_LEN       =       UINT8_MAX;
 
+
 public:
     // Commands with function callback
     CL_Command(const char* _name, const char* _help_info,
@@ -17,8 +18,20 @@ public:
     // with "add_sub_command()")
     CL_Command(const char* _name, const char* _help_info);
 
+    CL_Command(const char *_name, const char *_help_info,
+               void (*_callback)(int32_t), bool _takes_value);
+
+    CL_Command(const char *_name, const char *_help_info,
+               void (*_callback)(const char*), bool _takes_value);
+
     // Add a sub command to an existing command
     void add_sub_command(CL_Command* _nested_command);
+
+    enum CallbackType {
+        none    =   0x00,
+        i32     =   0x01,
+        str     =   0x02,
+    };
 
     // Full name
     char name[MAX_ARG_LEN]{}; // Full name
@@ -34,6 +47,16 @@ public:
     CL_Command* sub_commands[MAX_NEXTED_DEPTH]{};
     // Command callback function (no value passed)
     void (*callback)(){};
+    // Command callback with int32_t
+    void (*i32_callback)(int32_t){};
+    // Command callback with character array
+    void (*str_callback)(const char*){};
+    // Call back type for parsing
+    CallbackType callback_type;
+
+private:
+    // Helper for multiple constructors with different callback value types
+    void begin(const char* _name, const char* _help_info);
 };
 
 class ArduinoCLI {
@@ -56,6 +79,7 @@ public:
     CL_Command* scan_commands(const char* input);
     CL_Command* scan_command(const char* input,
                              const CL_Command* parent_command);
+    int32_t get_value();
     void help(const CL_Command* command);
     void help();
     bool exit(const char* input);

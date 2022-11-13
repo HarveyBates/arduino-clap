@@ -4,18 +4,34 @@ static char cmd_buffer[ArduinoCLI::MAX_CMD_BUF_LEN];
 
 CL_Command::CL_Command(const char* _name, const char* _help_info,
                        void (*_callback)(), bool _takes_value){
-
-    assert(strlen(_name) < MAX_ARG_LEN);
-    assert(strlen(_help_info) < MAX_HELP_LEN);
-
-    strncpy(name, _name, MAX_ARG_LEN);
+    begin(_name, _help_info);
     takes_value = _takes_value;
-    strncpy(help, _help_info, MAX_HELP_LEN);
-
     callback = _callback;
+    callback_type = none;
+}
+
+CL_Command::CL_Command(const char *_name, const char *_help_info,
+                       void (*_callback)(int32_t), bool _takes_value){
+    begin(_name, _help_info);
+    takes_value = _takes_value;
+    i32_callback = _callback;
+    callback_type = i32;
+}
+
+CL_Command::CL_Command(const char *_name, const char *_help_info,
+                       void (*_callback)(const char*), bool _takes_value) {
+    begin(_name, _help_info);
+    takes_value = _takes_value;
+    str_callback = _callback;
+    callback_type = str;
 }
 
 CL_Command::CL_Command(const char* _name, const char* _help_info){
+    begin(_name, _help_info);
+    callback_type = none;
+}
+
+void CL_Command::begin(const char* _name, const char* _help_info){
     assert(strlen(_name) < MAX_ARG_LEN);
     assert(strlen(_help_info) < MAX_HELP_LEN);
 
@@ -46,7 +62,30 @@ CL_Command* ArduinoCLI::scan_commands(const char* input){
     for(uint8_t i = 0; i < n_commands; i++){
         if(strcmp(input, commands[i]->name) == 0){
             if(!commands[i]->has_child){
-                commands[i]->callback();
+                switch(commands[i]->callback_type) {
+                    case CL_Command::CallbackType::i32: {
+                        int32_t i32_value = get_value();
+                        if (i32_value) {
+                            commands[i]->i32_callback(i32_value);
+                            return nullptr;
+                        } else {
+                            serial.println("Error parsing command");
+                        }
+                        break;
+                    }
+                    case CL_Command::CallbackType::str: {
+                        char *value = strtok(nullptr, "\"");
+                        if (value == nullptr) {
+                            serial.println("Error: value not found.");
+                        } else {
+                            commands[i]->str_callback(value);
+                            return nullptr;
+                        }
+                    }
+                    case CL_Command::none:
+                        commands[i]->callback();
+                        break;
+                }
             }
             return commands[i];
         }
@@ -67,7 +106,30 @@ CL_Command* ArduinoCLI::scan_command(const char* input,
     for(uint8_t i = 0; i < parent_command->n_sub_commands; i++){
         if(strcmp(input, parent_command->sub_commands[i]->name) == 0){
             if(!parent_command->sub_commands[i]->has_child){
-                parent_command->sub_commands[i]->callback();
+                switch(parent_command->sub_commands[i]->callback_type){
+                    case CL_Command::CallbackType::i32:{
+                        int32_t i32_value = get_value();
+                        if(i32_value){
+                            parent_command->sub_commands[i]->i32_callback(i32_value);
+                            return nullptr;
+                        } else {
+                            serial.println("Error parsing command");
+                        }
+                        break;
+                    }
+                    case CL_Command::CallbackType::str:{
+                        char* value = strtok(nullptr, "\"");
+                        if(value == nullptr){
+                            serial.println("Error: value not found.");
+                        } else {
+                            parent_command->sub_commands[i]->str_callback(value);
+                            return nullptr;
+                        }
+                    }
+                    case CL_Command::none:
+                        parent_command->sub_commands[i]->callback();
+                        break;
+                }
             }
             return parent_command->sub_commands[i];
         }
@@ -77,6 +139,26 @@ CL_Command* ArduinoCLI::scan_command(const char* input,
     serial.println(input);
 
     return nullptr;
+}
+
+int32_t ArduinoCLI::get_value(){
+    const char* value = strtok(nullptr, " ");
+
+    char* remainder = nullptr;
+
+    if(!value){
+        serial.println("Error: value not found.");
+    } else {
+        int32_t i32_value = strtol(value, &remainder, 10);
+        if(remainder == value) {
+            // Error parsing value
+            return NULL;
+        } else {
+            return i32_value;
+        }
+    }
+
+    return NULL;
 }
 
 void ArduinoCLI::help(const CL_Command* command){
@@ -130,26 +212,30 @@ void ArduinoCLI::enter(){
 
             const char* delim_cmd = strtok(cmd_buffer, " ");
             CL_Command* parent_argument = nullptr;
-            while(delim_cmd != NULL){
+            while(delim_cmd){
+
                 exit_cli = exit(delim_cmd);
                 if(exit_cli){
-                    break;
+                    memset(cmd_buffer, 0, sizeof(cmd_buffer));
+                    return;
                 }
+
                 if(parent_argument == nullptr){
                     parent_argument = scan_commands(delim_cmd);
-                    if(parent_argument == nullptr){
-                        break;
-                    }
                 } else {
                     parent_argument = scan_command(delim_cmd,
                                                    parent_argument);
                 }
-                delim_cmd = strtok(NULL, " ");
+
+                if(parent_argument == nullptr){
+                    break;
+                }
+
+                delim_cmd = strtok(nullptr, " ");
             }
             serial.print("$ ");
+            memset(cmd_buffer, 0, sizeof(cmd_buffer));
         }
-
-        memset(cmd_buffer, 0, sizeof(cmd_buffer));
         delay(1);
     }
 }
