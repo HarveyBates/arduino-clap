@@ -52,6 +52,7 @@ void blink_dynamic(int32_t rate){
     }
 }
 
+// Function that echos user input
 void echo(const char* input){
     Serial.print(input);
 }
@@ -92,6 +93,14 @@ void setup(){
 
     // Enter the CLI
     cli->enter();
+    
+    free(led_blink_fast);
+    free(led_blink_dyn);
+    free(led_blink_str);
+    free(led_blink);
+    free(led_commands);
+    free(echo_commands);
+    free(cli);
 }
 
 void loop(){

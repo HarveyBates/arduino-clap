@@ -25,6 +25,9 @@ void setup(){
 
     // Enter the CLI
     cli->enter();
+
+    free(echo_commands);
+    free(cli);
 }
 
 void loop(){

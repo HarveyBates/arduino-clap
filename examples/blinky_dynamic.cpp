@@ -44,6 +44,11 @@ void setup(){
 
     // Enter the CLI
     cli->enter();
+
+    free(led_blink_dyn);
+    free(led_blink);
+    free(led_commands);
+    free(cli);
 }
 
 void loop(){

@@ -58,6 +58,12 @@ void setup(){
 
     // Enter the CLI
     cli->enter();
+
+    free(led_blink_fast);
+    free(led_blink_slow);
+    free(led_blink);
+    free(led_commands);
+    free(cli);
 }
 
 void loop(){
