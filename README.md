@@ -51,7 +51,6 @@ void setup(){
   
   // Add a command for controlling the onboard led's blink rate
   led_blink = new CL_Command("blink", "LED blink rate control");
-  
   // Append the "fast" command to the "blink" command
   led_blink.add_sub_command(led_blink_fast);
   
