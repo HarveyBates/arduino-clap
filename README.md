@@ -19,7 +19,6 @@ ArduinoCLI* cli;
 // Basic functions to demonstrate usage
 void blink_fast(){
   Serial.println("Blinking fast!");
-  pinMode(BUILTIN_LED, OUTPUT);
   for(uint8_t i = 0; i < 10; i++){
     digitalWrite(BUILTIN_LED, HIGH);
     delay(100);
@@ -31,7 +30,6 @@ void blink_fast(){
 // Basic functions to demonstrate usage
 void blink_slow(){
   Serial.println("Blinking slow!");
-  pinMode(BUILTIN_LED, OUTPUT);
   for(uint8_t i = 0; i < 10; i++){
     digitalWrite(BUILTIN_LED, HIGH);
     delay(500);
@@ -42,6 +40,7 @@ void blink_slow(){
 
 void setup(){
   Serial.begin(115200);
+  pinMode(BUILTIN_LED, OUTPUT);
   
   // Pass the serial object into the CLI
   cli = new ArduinoCLI(Serial);
@@ -56,8 +55,9 @@ void setup(){
   // Append the "fast" command to the "blink" command
   led_blink.add_sub_command(led_blink_fast);
   
-  // Append the "blink" command to the "led" command
+  // Add a command for LED control functions
   led_commands = new CL_Command("led", "LED control service");
+  // Append the "blink" command to the "led" command
   led_commands.add_sub_command(led_blink);
   
   // Add the "led" command to the CLI
