@@ -84,6 +84,13 @@ Blinking Fast!
 
 ## Inbuilt help
 The example above has an inbuilt help funciton for each level.
+
+```
+$ help
+OPTIONS:
+	led	Onboard LED control service
+```
+
 ```
 $ led help
 USAGE:
