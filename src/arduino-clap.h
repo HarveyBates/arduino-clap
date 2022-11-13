@@ -11,12 +11,10 @@ class CL_Command{
 
 public:
     // Commands with function callback
-    CL_Command(const char* _name, bool _takes_value, const char* _help_info,
-               void (*_callback)());
-    // Commands with nested command
     CL_Command(const char* _name, const char* _help_info,
-               CL_Command* _nested_command);
-    // Command with multiple nested command
+               void (*_callback)(), bool _takes_value = false);
+    // Command with multiple nested commands (to be added post initialisation
+    // with "add_sub_command()")
     CL_Command(const char* _name, const char* _help_info);
 
     // Add a sub command to an existing command
@@ -34,7 +32,7 @@ public:
     uint8_t n_sub_commands = 0;
     // List of nested commands
     CL_Command* sub_commands[MAX_NEXTED_DEPTH]{};
-    // Command callback function
+    // Command callback function (no value passed)
     void (*callback)(){};
 };
 

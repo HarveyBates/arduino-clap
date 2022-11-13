@@ -39,8 +39,8 @@ void setup(){
     cli = new ArduinoCLI(Serial);
 
     // Add a blink fast command with a callback to the "void blink_fast()" function
-    led_blink_fast = new CL_Command("fast", false, "Blink the onboard LED fast!", blink_fast);
-    led_blink_slow = new CL_Command("slow", false, "Blink the onboard LED slow!", blink_slow);
+    led_blink_fast = new CL_Command("fast", "Blink the onboard LED fast!", blink_fast);
+    led_blink_slow = new CL_Command("slow", "Blink the onboard LED slow!", blink_slow);
 
     // Command for controlling the onboard led's blink rate
     led_blink = new CL_Command("blink", "LED blink rate control");

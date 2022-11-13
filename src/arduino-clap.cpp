@@ -2,8 +2,8 @@
 
 static char cmd_buffer[ArduinoCLI::MAX_CMD_BUF_LEN];
 
-CL_Command::CL_Command(const char* _name, bool _takes_value,
-                       const char* _help_info, void (*_callback)()){
+CL_Command::CL_Command(const char* _name, const char* _help_info,
+                       void (*_callback)(), bool _takes_value){
 
     assert(strlen(_name) < MAX_ARG_LEN);
     assert(strlen(_help_info) < MAX_HELP_LEN);
@@ -13,22 +13,6 @@ CL_Command::CL_Command(const char* _name, bool _takes_value,
     strncpy(help, _help_info, MAX_HELP_LEN);
 
     callback = _callback;
-}
-
-CL_Command::CL_Command(const char* _name, const char* _help_info,
-                       CL_Command* _nested_command){
-
-    assert(strlen(_name) < MAX_ARG_LEN);
-    assert(strlen(_help_info) < MAX_HELP_LEN);
-
-    strncpy(name, _name, MAX_ARG_LEN);
-    strncpy(help, _help_info, MAX_HELP_LEN);
-
-    has_child = true;
-
-    if(n_sub_commands < MAX_NEXTED_DEPTH){
-        sub_commands[n_sub_commands++] = _nested_command;
-    }
 }
 
 CL_Command::CL_Command(const char* _name, const char* _help_info){
