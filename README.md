@@ -107,5 +107,8 @@ OPTIONS:
 	slow	Blink the onboard LED slow!
 ```
 
-
-
+## Exiting
+```
+$ exit
+Exiting command line.
+```
