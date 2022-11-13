@@ -14,7 +14,7 @@ CL_Command* led_blink_dyn;
 CL_Command* led_blink;
 CL_Command* led_commands;
 
-// Setup echo control command
+// Setup echo command
 CL_Command* echo_commands;
 
 // Setup command line interface objects
