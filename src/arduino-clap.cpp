@@ -54,6 +54,10 @@ void ArduinoCLI::add_command(CL_Command *command) {
 }
 
 CL_Command* ArduinoCLI::scan_commands(const char* input){
+    if(strcmp(input, "help") == 0){
+        help();
+        return nullptr;
+    }
 
     for(uint8_t i = 0; i < n_commands; i++){
         if(strcmp(input, commands[i]->name) == 0){
@@ -109,6 +113,16 @@ void ArduinoCLI::help(const CL_Command* command){
         serial.print(command->sub_commands[i]->name);
         serial.print("\t");
         serial.println(command->sub_commands[i]->help);
+    }
+}
+
+void ArduinoCLI::help(){
+    serial.println("OPTIONS:");
+    for(uint8_t i = 0; i < n_commands; i++){
+        serial.print("\t");
+        serial.print(commands[i]->name);
+        serial.print("\t");
+        serial.println(commands[i]->help);
     }
 }
 

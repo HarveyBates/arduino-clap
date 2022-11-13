@@ -59,6 +59,7 @@ public:
     CL_Command* scan_command(const char* input,
                              const CL_Command* parent_command);
     void help(const CL_Command* command);
+    void help();
     bool exit(const char* input);
     void enter();
 };
