@@ -61,7 +61,6 @@ private:
 
 class ArduinoCLI {
     // Constants
-    static const uint8_t MAX_NAME_LEN       =       20;
     static const uint8_t MAX_COMMANDS       =       3;
 
     uint8_t n_commands                      =       0;
@@ -75,15 +74,26 @@ public:
 
     static const uint8_t MAX_CMD_BUF_LEN    =       UINT8_MAX;
 
+    typedef enum {
+        CLI_OK = 0x00,
+        CLI_UNKNOWN_COMMAND = 0x01,
+        CLI_PARSE_ERROR = 0x02,
+        CLI_HELP_NOT_FOUND = 0x03,
+        CLI_EXPECTED_VALUE_NOT_FOUND = 0x04,
+        CLI_COMPLETE = 0x05
+    } CLI_Status;
+
     void add_command(CL_Command* command);
-    CL_Command* scan_commands(const char* input);
-    CL_Command* scan_command(const char* input,
-                             const CL_Command* parent_command);
-    int32_t get_value();
+    CL_Command* scan_primary_commands(const char* input);
+    CL_Command* scan_sub_commands(const char* input,
+                                  CL_Command* current_command);
+    bool handle_command(const char *input, CL_Command* command);
+    void handle_error(const char* input, CLI_Status status);
+    int32_t get_i32_value();
     void help(const CL_Command* command);
     void help();
-    bool exit(const char* input);
     void enter();
+    bool exit(const char* input);
 };
 
 
