@@ -157,3 +157,11 @@ OPTIONS:
 $ exit
 Exiting command line.
 ```
+
+## Limitations
+1. Class functions must be static.
+2. Input command size has a maximum of 256 chacracters.
+3. Maxiumum length of an argument is 8 chacracters.
+4. There can be a maximum of 3 nested arguments.
+5. Maxiumum length of a help string is 100 characters.
+
