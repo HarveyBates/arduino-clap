@@ -5,9 +5,9 @@
 
 class CL_Command{
     // Constants
-    static const uint8_t MAX_ARG_LEN        =       20;
-    static const uint8_t MAX_NEXTED_DEPTH   =       10;
-    static const uint8_t MAX_HELP_LEN       =       UINT8_MAX;
+    static const uint8_t MAX_ARG_LEN        =       8;
+    static const uint8_t MAX_NESTED_DEPTH   =       3;
+    static const uint8_t MAX_HELP_LEN       =       100;
 
 
 public:
@@ -44,7 +44,7 @@ public:
     // Number of nested commands
     uint8_t n_sub_commands = 0;
     // List of nested commands
-    CL_Command* sub_commands[MAX_NEXTED_DEPTH]{};
+    CL_Command* sub_commands[MAX_NESTED_DEPTH]{};
     // Command callback function (no value passed)
     void (*callback)(){};
     // Command callback with int32_t
@@ -61,18 +61,19 @@ private:
 
 class ArduinoCLI {
     // Constants
-    static const uint8_t MAX_COMMANDS       =       3;
+    static const uint8_t MAX_COMMANDS       =       10;
 
     uint8_t n_commands                      =       0;
     CL_Command* commands[MAX_COMMANDS]{};
 
-    Stream& serial;
 
 public:
     explicit ArduinoCLI(Stream& _serial) : serial(_serial) {}
+
     ~ArduinoCLI() = default;
 
-    static const uint8_t MAX_CMD_BUF_LEN    =       UINT8_MAX;
+    Stream& serial;
+    static const uint16_t MAX_CMD_BUF_LEN    =       UINT8_MAX;
 
     typedef enum {
         CLI_OK = 0x00,
@@ -92,7 +93,8 @@ public:
     int32_t get_i32_value();
     void help(const CL_Command* command);
     void help();
-    void enter();
+    bool parse_command(char* pCommand);
+    virtual void enter();
     bool exit(const char* input);
 };
 

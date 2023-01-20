@@ -32,8 +32,9 @@ CL_Command::CL_Command(const char* _name, const char* _help_info){
 }
 
 void CL_Command::begin(const char* _name, const char* _help_info){
-    assert(strlen(_name) < MAX_ARG_LEN);
-    assert(strlen(_help_info) < MAX_HELP_LEN);
+    if(strlen(_name) > MAX_ARG_LEN || strlen(_help_info) > MAX_HELP_LEN){
+        return;
+    }
 
     strncpy(name, _name, MAX_ARG_LEN);
     strncpy(help, _help_info, MAX_HELP_LEN);
@@ -42,12 +43,12 @@ void CL_Command::begin(const char* _name, const char* _help_info){
 void CL_Command::add_sub_command(CL_Command* _nested_command){
     has_child = true;
 
-    if(n_sub_commands < MAX_NEXTED_DEPTH){
+    if(n_sub_commands < MAX_NESTED_DEPTH){
         sub_commands[n_sub_commands++] = _nested_command;
     }
 }
 
-void ArduinoCLI::add_command(CL_Command *command) {
+void ArduinoCLI::add_command(CL_Command* command) {
     if(n_commands < MAX_COMMANDS){
         commands[n_commands++] = command;
     }
@@ -108,7 +109,7 @@ bool ArduinoCLI::handle_command(const char *input, CL_Command* command) {
         switch(command->callback_type){
             case CL_Command::CallbackType::i32:{
                 int32_t i32_value = get_i32_value();
-                if(i32_value){
+                if(i32_value != -1){
                     command->i32_callback(i32_value);
                 } else {
                     handle_error(input, CLI_PARSE_ERROR);
@@ -118,7 +119,7 @@ bool ArduinoCLI::handle_command(const char *input, CL_Command* command) {
             case CL_Command::CallbackType::str:{
                 char* value = strtok(nullptr, "\"");
                 if(value){
-                    command->str_callback(value);
+                   command->str_callback(value);
                 } else {
                     handle_error(input, CLI_EXPECTED_VALUE_NOT_FOUND);
                 }
@@ -146,13 +147,12 @@ int32_t ArduinoCLI::get_i32_value(){
         int32_t i32_value = strtol(value, &remainder, 10);
         if(remainder == value) {
             // Error parsing value
-            return NULL;
         } else {
             return i32_value;
         }
     }
 
-    return NULL;
+    return -1;
 }
 
 void ArduinoCLI::handle_error(const char* input, CLI_Status status) {
@@ -178,6 +178,7 @@ void ArduinoCLI::handle_error(const char* input, CLI_Status status) {
 }
 
 void ArduinoCLI::help(const CL_Command* command){
+
     serial.println("USAGE:");
     serial.print("\t");
     serial.print(command->name);
@@ -215,39 +216,46 @@ bool ArduinoCLI::exit(const char* input){
     return false;
 }
 
+bool ArduinoCLI::parse_command(char* pCommand){
+    char* input = strtok(pCommand, " ");
+
+    if(exit(input)){
+        memset(cmd_buffer, 0, sizeof(cmd_buffer));
+        return true;
+    }
+
+    CL_Command* current_command = scan_primary_commands(input);
+
+    if(!current_command){
+        goto cmd_complete;
+    }
+
+    input = strtok(nullptr, " ");
+
+    while(input){
+        current_command = scan_sub_commands(input, current_command);
+        if(!current_command){
+            goto cmd_complete;
+        }
+        input = strtok(nullptr, " ");
+    }
+
+    cmd_complete:
+    serial.print("$ ");
+    memset(cmd_buffer, 0, sizeof(cmd_buffer));
+
+    return false;
+}
+
 void ArduinoCLI::enter(){
     serial.print("$ ");
-    while(true) {
+    bool exit = false;
+    while(!exit) {
         if(serial.available()){
             serial.readBytesUntil('\n', cmd_buffer, sizeof(cmd_buffer));
+            cmd_buffer[strcspn(cmd_buffer, "\r\n")] = '\0';
             serial.println(cmd_buffer);
-
-            char* input = strtok(cmd_buffer, " ");
-
-            if(exit(input)){
-                memset(cmd_buffer, 0, sizeof(cmd_buffer));
-                return;
-            }
-
-            CL_Command* current_command = scan_primary_commands(input);
-
-            if(!current_command){
-                goto cmd_complete;
-            }
-
-            input = strtok(nullptr, " ");
-
-            while(input){
-                current_command = scan_sub_commands(input, current_command);
-                if(!current_command){
-                    goto cmd_complete;
-                }
-                input = strtok(nullptr, " ");
-            }
-
-            cmd_complete:
-            serial.print("$ ");
-            memset(cmd_buffer, 0, sizeof(cmd_buffer));
+            exit = parse_command(cmd_buffer);
         }
         delay(1);
     }
