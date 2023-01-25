@@ -1,167 +1,75 @@
 # arduino-clap
 Arduino ecosystem command line argument parser (CLAP).
 
+## Features
+A simple header only CLI to set random function values on the fly.
+- Small implementation (500b to 1kb).
+- Automatically coverts the CLI arguments to their type so you don't have to do that yourself. 
+- Supports multiple args on a single line.
+- Supports args in quotations.
+- Has an input range function, e.g. `speed range 0:100:500` (start:stop:interval)
+- Inbuilt help.
+
 # Usage
 
 ## Example
 ```c++
 #include <arduino-clap.h>
 
-// Setup LED control commands
-Arg* led_blink_fast;
-Arg* led_blink_slow;
-Arg* led_blink_dyn;
-Arg* led_blink;
-Arg* led_commands;
+void echo(const char* msg){
+    Serial.println(msg);
+}
 
-// Setup echo command
-Arg* echo_commands;
+void set_motor_speed(uint16_t speed){
+    update_speed(speed);
+}
 
-// Setup command line interface objects
 ArduinoCLI* cli;
-
-// Basic functions to demonstrate usage
-void blink_fast(){
-    Serial.println("Blinking fast!");
-    for(uint8_t i = 0; i < 10; i++){
-        digitalWrite(BUILTIN_LED, HIGH);
-        delay(100);
-        digitalWrite(BUILTIN_LED, LOW);
-        delay(100);
-    }
-}
-
-// Basic functions to demonstrate usage
-void blink_slow(){
-    Serial.println("Blinking slow!");
-    for(uint8_t i = 0; i < 10; i++){
-        digitalWrite(BUILTIN_LED, HIGH);
-        delay(500);
-        digitalWrite(BUILTIN_LED, LOW);
-        delay(500);
-    }
-}
-
-// Basic function using user input (int32_t)
-void blink_dynamic(int32_t rate){
-    for(uint8_t i = 0; i < 10; i++){
-        digitalWrite(BUILTIN_LED, HIGH);
-        delay(rate);
-        digitalWrite(BUILTIN_LED, LOW);
-        delay(rate);
-    }
-}
-
-// Function that echos user input
-void echo(const char* input){
-    Serial.print(input);
-}
 
 void setup(){
     Serial.begin(115200);
-    pinMode(BUILTIN_LED, OUTPUT);
-
-    // Pass the serial object into the CLI
     cli = new ArduinoCLI(Serial);
-
-    // Add a blink fast command with a callback to the "void blink_fast()" function
-    led_blink_fast = new Arg("fast", "Blink the onboard LED fast!", blink_fast);
-    led_blink_slow = new Arg("slow", "Blink the onboard LED slow!", blink_slow);
-    
-    // Add a dynamic blinker (type inferred from constructor)
-    led_blink_dyn = new Arg("dynamic", "Blink the onboard LED dynamically!",
-                                    blink_dynamic, true);
-
-    // Command for controlling the onboard led's blink rate
-    led_blink = new Arg("blink", "LED blink rate control");
-    // Append the "fast" and "slow" commands to the "blink" command
-    led_blink->add_sub_command(led_blink_fast);
-    led_blink->add_sub_command(led_blink_slow);
-    led_blink->add_sub_command(led_blink_dyn);
-
-    // Command for LED control functions
-    led_commands = new Arg("led", "LED control service");
-    // Append the "blink" command to the "led" command
-    led_commands->add_sub_command(led_blink);
-    
-    // Echo input commands
-    echo_commands = new Arg("echo", "Echo user input", echo, true);
-
-    // Add the "led" command to the CLI
-    cli->add_command(led_commands);
-    cli->add_command(echo_commmands);
-
-    // Enter the CLI
+    cli->add_argument<const char*>("echo:", 
+                                   "Echo user input.", 
+                                   echo);
+    cli->add_argument<uint16_t>("motor_speed", 
+                                "Set motor speed.", 
+                                set_motor_speed);
     cli->enter();
-    
-    free(led_blink_fast);
-    free(led_blink_dyn);
-    free(led_blink_str);
-    free(led_blink);
-    free(led_commands);
-    free(echo_commands);
-    free(cli);
 }
 
 void loop(){
-    // Wont get here until the CLI (cli) is exited with the "exit" command
+    // Will not get here until the CLI (cli) is exited with 
+    // the "exit" command
     delay(1);
 }
 ```
 
 ## Running the above example
 ```
-$ led blink slow
-Blinking Slow!
+$ echo: "Hello World!"
+Hello World!
 
-$ led blink fast
-Blinking Fast!
+$ motor_speed 9000
+-> Motor speed set to 9000
 
-$ led blink dynamic 200
--> LED blinking with 200 ms spacing
-
-$ echo "this is some user input"
-this is some user input
+$ motor_speed range 0:100:500
+-> Motor speed set from 0 to 100 with 500 ms between speed changes
 ```
 
 ## Inbuilt help
-The example above has an inbuilt help function for each level.
+The example above has an inbuilt help function.
 
 ```
 $ help
 OPTIONS:
-	led	Onboard LED control service
-	echo	Echo user input
-```
-
-```
-$ led help
-USAGE:
-	led [OPTIONS]
-OPTIONS:
-	blink	LED blink rate control.
-```
-
-```
-$ led blink help
-USAGE:
-	blink [OPTIONS]
-OPTIONS:
-	fast	Blink the onboard LED fast!
-	slow	Blink the onboard LED slow!
-	dynamic	Blink the onboard LED dynamically!
+    echo:               echo user input                                   
+    motor_speed         Set motor speed                                    
+    int                 echo user input    
 ```
 
 ## Exiting
 ```
 $ exit
-Exiting command line.
+Exited command line.
 ```
-
-## Limitations
-1. Class functions must be static.
-2. Input command size has a maximum of 256 chacracters.
-3. Maxiumum length of an argument is 8 chacracters.
-4. There can be a maximum of 3 nested arguments.
-5. Maxiumum length of a help string is 100 characters.
-
