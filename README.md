@@ -79,18 +79,23 @@ This will call the `update_speed()` function with the values 0 to 100 then 100 t
 ## Example
 ```c++
 #include <arduino-clap.h>
+#include <Servo.h> // Not necessary, just an example
 
 void echo(const char* msg){ Serial.println(msg); }
-
 void set_motor_speed(int speed){ update_speed(speed); }
+
+Servo servo;
 
 ArduinoCLI* cli;
 
 void setup(){
     Serial.begin(115200);
+    servo.attach(9);
+   
     cli = new ArduinoCLI(Serial);
     cli->add_argument<const char*>("echo:", "Echo user input.", echo);
-    cli->add_argument<int>("motor_speed", "Set motor speed.", set_motor_speed);
+    cli->add_argument<int>("motor-speed", "Set motor speed.", set_motor_speed);
+    cli->add_argument<int>("servo-angle", "Set servo angle.", [](int a){ servo.write(a); }); // Non-static
     cli->enter();
 }
 
@@ -108,7 +113,8 @@ The example above has an inbuilt help function.
 $ help
 OPTIONS:
 	echo:               Echo user input.                                                 
-	motor_speed         Set motor speed.                                                                                                        
+	motor-speed         Set motor speed.
+	servo-angle.        Set servo angle.
 HELPERS:
 	help                Print out help information.                                                   
 	range               Execute function with values within a range (start:stop:interval_ms).         
@@ -122,3 +128,6 @@ HELPERS:
 $ exit
 Exited command line.
 ```
+
+## Licence 
+This project is under the GNU LESSER GENERAL PUBLIC LICENSE as found in the LICENCE file.
