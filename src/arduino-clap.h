@@ -21,10 +21,22 @@
 
 #include <Arduino.h>
 
+//! Define to enable `range` and `loop` inbuilt functions
 #define CLI_RANGE_LOOP
 
+//! Message buffer for CLI commands entered by the user
 static char cmd_buffer[100]{};
 
+/**
+ * @breif Generic CLI arguments class.
+ *
+ * Acts to enable the organisation of arguments that accept different types
+ * (int, float, char etc.) into a single array that can easily be iterated
+ * through. All functions are virtual and are overwritten by an `Argument` to
+ * pass values around within the `ArduinoCLI` class.
+ *
+ * @note Documentation for these functions are provided in the `Argument` class.
+ */
 class Arguments {
 public:
     virtual void execute_callback(const char* arg_val) = 0;
@@ -34,6 +46,19 @@ public:
     virtual bool void_callback() = 0;
 };
 
+/**
+ * @brief Namespace to store conversions from const char* to various types.
+ *
+ * Supports:
+ * - const char* (no-conversion, straight pass)
+ * - float, double
+ * - uint32_t, uint16_t, uint8_t
+ * - int32_t, int16_t (int on UNO), uint8_t
+ *
+ * @note Overflow conversion revert to zero. For example, a conversion of
+ * 40,000 to type int8_t will result in 0. The same goes for negative numbers
+ * for unsigned ints and overflows.
+ */
 namespace ParseArg {
     template <typename X>
     X type(const char* value) { return value; }
@@ -90,21 +115,44 @@ namespace ParseArg {
     }
 }
 
+/**
+ * @brief Command line argument.
+ *
+ * Stores the name of the argument, a help string and the callback the argument
+ * should trigger. Two constructors are provided, one for callbacks that take
+ * a value (of some type) and stand alone callbacks e.g. `callback(void)`.
+ * Functions from within the Arguments class are overwritten here to provide
+ * a passthrough between Arguments of different types.
+ *
+ * @warning The assigning of an argument can silently fail if the name or help
+ * message are too long (15 and 75 characters respectively).
+ *
+ * @tparam T Type of argument expected in callback function.
+ */
 template <typename T>
 class Argument : public Arguments {
-    // Constants
-    static const uint8_t MAX_ARG_LEN        =   15;  // Argument name length
-    static const uint8_t MAX_HELP_LEN       =   75; // Help information length
-    // Full name
-    char name[MAX_ARG_LEN]{}; // Full name
-    // Help information
-    char help[MAX_HELP_LEN]{}; // Help information
-    bool void_cb = false;
+    static const uint8_t MAX_ARG_LEN    =   15;    //! Argument name length
+    static const uint8_t MAX_HELP_LEN   =   75;    //! Help information length
+    char name[MAX_ARG_LEN]{};    //! Argument name
+    char help[MAX_HELP_LEN]{};   //! Help information
+    bool void_cb = false;        //! Does the callback expect a value?
 
-public:
+    //! Callback function that takes a value of type T
     typedef void(*Callback)(T);
+    //! Callback function that does not take a value (void)
+    typedef void(*vCallback)();
+public:
+    //! Reference to a callback function that takes a value
     Callback callback = nullptr;
-    // Command that has a callback function attached to it
+
+    /**
+     * @breif Argument constructor that accepts a callback with a value of type
+     * T.
+     *
+     * @param _name Name of the argument that can be called from the cmd line.
+     * @param _help Help message when the user types `help` in the cmd line.
+     * @param cb Function that accepts a value.
+     */
     Argument(const char* _name, const char* _help, Callback cb) : callback(cb) {
         if(!validate_arg(_name, _help)) {
             return;
@@ -113,8 +161,16 @@ public:
         strncpy(help, _help, MAX_HELP_LEN);
     }
 
-    typedef void(*vCallback)();
+    //! Reference to a callback function that does not take a value
     vCallback vcallback = nullptr;
+
+    /**
+     * @breif Argument constructor that does not accept a value.
+     *
+     * @param _name Name of the argument that can be called from the cmd line.
+     * @param _help Help message when the user types `help` in the cmd line.
+     * @param cb Function that does not accept a value.
+     */
     Argument(const char* _name, const char* _help, vCallback cb) : vcallback(cb) {
         if(!validate_arg(_name, _help)) {
             return;
@@ -124,6 +180,16 @@ public:
         strncpy(help, _help, MAX_HELP_LEN);
     }
 
+    /**
+     * @brief Executes an arguments callback function.
+     *
+     * If the argument has a void callback function it will trigger the callback
+     * without passing a value. If the callback function accepts a value the
+     * value will be parsed from a const char* to whatever value the function
+     * accepts.
+     *
+     * @param arg_val Argument value provided by user in CLI.
+     */
     void execute_callback(const char* arg_val) override {
         if(void_cb){
             vcallback();
@@ -133,13 +199,23 @@ public:
         callback(value);
     }
 
+    //! Get the name of the argument
     const char* get_name() override { return name; }
+    //! Get the length of the name (used for finding `:` at end of name)
     uint8_t get_name_len() override { return strlen(name); }
+    //! Get help information for argument
     const char* get_help() override { return help; }
+    //! Check if the callback function expects no value
     bool void_callback() override { return void_cb; }
 
 private:
-    // Ensure command name and help information are valid
+    /**
+     * @brief Ensure command name and help information are valid.
+     *
+     * @param _name Argument name.
+     * @param _help_info Argument help information.
+     * @return Status of valid arguments (true if valid).
+     */
     bool validate_arg(const char* _name, const char* _help_info){
         if(strlen(_name) > MAX_ARG_LEN || strlen(_help_info) > MAX_HELP_LEN){
             return false;
@@ -148,31 +224,72 @@ private:
     }
 };
 
+/**
+ * @brief Arduino command line interface that parses user input.
+ * @note Maximum number of arguments is 10.
+ */
 class ArduinoCLI {
+    //! Output stream (typically `Serial`)
     Stream& stream;
+    //! Collection of command line arguments
     Arguments* args[10]{};
+    //! Number of stored command line arguments
     uint8_t n_args = 0;
-    char help_buffer[100]{}; // Single line of help message
+    //! Buffer to hold a single line of a help message (see `help()`)
+    char help_buffer[100]{};
 public:
+    /**
+     * @brief Constructor for ArduinoCLI.
+     *
+     * @param _serial Stream for incoming and outgoing msgs.
+     */
     explicit ArduinoCLI(Stream& _serial) : stream(_serial) {}
+
+    /**
+     * @brief ArduinoCLI destructor, clears all arguments.
+     */
     ~ArduinoCLI() {
         for(uint8_t i = 0; i < n_args; i++){
             free(args[i]);
         }
     }
 
+    /**
+     * @brief Add argument to CLI.
+     *
+     * @note This method accepts a type that is passed to the callback
+     * function.
+     *
+     * @tparam T Type of value passed to callback function.
+     * @param name Name of argument.
+     * @param help Help information surrounding argument.
+     * @param cb Callback function that accepts a value of type T.
+     */
     template <typename T = void>
     void add_argument(const char* name, const char* help,
                       void(*cb)(T)){
         args[n_args++] = new Argument<T>(name, help, cb);
     }
 
+    /**
+     * @brief Add argument to CLI.
+     *
+     * @note This method is for callback functions that accept no value.
+     *
+     * @tparam T Dummy template (not used, or required by user).
+     * @param name Name of argument.
+     * @param help Help information surrounding argument.
+     * @param cb Callback function that does not accept a value.
+     */
     template <typename T = uint8_t>
     void add_argument(const char* name, const char* help,
                       void(*cb)()){
         args[n_args++] = new Argument<T>(name, help, cb);
     }
 
+    /**
+     * @brief CLI state for printing helpful error messages.
+     */
     typedef enum {
         CLI_OK,
         CLI_ERROR,
@@ -182,6 +299,11 @@ public:
     } CLI_Status;
 
 private:
+    /**
+     * @brief Arduino CLI error handler based on `CLI_Status`.
+     * @param input Input from user.
+     * @param status Status of possible errors.
+     */
     void handle_error(const char* input, CLI_Status status) {
         switch(status){
             case CLI_OK:
@@ -198,6 +320,10 @@ private:
         stream.println(input);
     }
 
+    /**
+     * @brief Prints out help information for all arguments and
+     * helper functions.
+     */
     void help(){
         stream.println("OPTIONS:");
         for(uint8_t i = 0; i < n_args; i++){
@@ -223,6 +349,19 @@ private:
     }
 
 #ifdef CLI_RANGE_LOOP
+
+    /**
+     * @brief Parse message from `range` or `loop`.
+     *
+     * If the user supplies `range` or `loop` this function will extract
+     * the values and carry out the `range()` or `loop()` function until
+     * the user enters `stop` in the CLI.
+     *
+     * @param input Pointer to the argument provided by the user.
+     * @param arg Reference to the argument that the `loop` or `range` will
+     * be run on.
+     * @return Status of the CLI.
+     */
     CLI_Status parse_range_loop(char* input, Arguments* arg){
 
         bool _range = true;
@@ -261,6 +400,18 @@ private:
         return CLI_OK;
     }
 
+    /**
+     * @brief Execute the `range` function.
+     *
+     * If the user provides the keyword `range` after an argument
+     * that accepts an integer this function will parse out the supplied
+     * range request (looks like this 0:10:250) where start:stop:interval.
+     *
+     * @param arg Argument to execute over range.
+     * @param start Value at start of range.
+     * @param stop Value at end of range.
+     * @param interval Interval between start and stop increments.
+     */
     void cb_range(Arguments* arg, int32_t start, int32_t stop,
                          uint32_t interval){
         char range_buf[6]{};
@@ -276,6 +427,19 @@ private:
 
     }
 
+    /**
+     * @brief Execute the `loop` function.
+     *
+     * The `loop` function increments between start and stop by 1 value every
+     * interval (in ms). When reaching stop the `loop` function decrements by
+     * 1 value every interval until it reaches the start value. It repeats this
+     * until the user supplies the `stop` command in the cmd line.
+     *
+     * @param arg Argument to execute over range.
+     * @param start Value at start of range.
+     * @param stop Value at end of range.
+     * @param interval Interval between start and stop increments.
+     */
     void cb_loop(Arguments* arg, int32_t start, int32_t stop,
                  uint32_t interval) {
         char range_buf[6]{};
@@ -297,6 +461,11 @@ private:
         }
     }
 
+    /**
+     * @brief Checks if the user has supplied a `stop` command when in a
+     * `loop` function.
+     * @return Has the user entered stop?
+     */
     bool range_loop_exit(){
         if(stream.available()){
             stream.readBytesUntil('\n', cmd_buffer, sizeof(cmd_buffer)-1);
@@ -307,9 +476,21 @@ private:
         }
         return false;
     }
-#endif // CLI_RANGE_LOOP
+    #endif // CLI_RANGE_LOOP
 
 
+    /**
+     * @brief Finds matches to user input and arguments and executes the
+     * required functions based on the input provided.
+     *
+     * Once a command has been successfully extracted it is passed to this
+     * function to carry out parsing and execution of various callback
+     * functions based on the arguments name. Special arguments such as
+     * `help`, `loop` and `range` are handled here as well.
+     *
+     * @param input User input from CLI.
+     * @return Status of CLI.
+     */
     CLI_Status scan_arg(char* input){
         if(!input){
             handle_error(input, CLI_EXPECTED_VALUE_NOT_FOUND);
@@ -328,6 +509,8 @@ private:
                     return CLI_OK;
                 }
 
+                // If the argument name ends with `:` its value
+                // should be in quotations.
                 if(input[args[i]->get_name_len() - 1] == ':'){
                     input = strtok(nullptr, "\"");
                 } else {
@@ -353,6 +536,16 @@ private:
         return CLI_UNKNOWN_COMMAND;
     }
 
+    /**
+     * @brief Extract a valid command from user input.
+     *
+     * Each valid argument is identified here. The search for valid commands
+     * will continue until `input` equals a `nullptr` or a function does not
+     * return `CLI_OK`.
+     *
+     * @param pCommand User input.
+     * @return Should the CLI exit (only if `exit` is passed)
+     */
     bool parse_command(char* pCommand){
         char* input = strtok(pCommand, " ");
 
@@ -375,6 +568,11 @@ private:
         return false;
     }
 
+    /**
+     * @brief Exit the command line interface.
+     * @param input Command from user.
+     * @return True if CLI should exit.
+     */
     bool exit(const char* input){
         if(strcmp("exit", input) == 0){
             stream.println("Exited command line.");
@@ -385,6 +583,12 @@ private:
 
 public:
 
+    /**
+     * @brief Main entrypoint for the CLI.
+     *
+     * Accepts and parses commands from the user. Commands will be parsed until
+     * the user provides an `exit` command.
+     */
     void enter(){
         stream.print("$ ");
         bool exit = false;
