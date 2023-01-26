@@ -1,6 +1,6 @@
 # arduino-clap
 
-A simple header only CLI to set function values during prototyping.
+A header only CLI to set function values during Arduino prototyping.
 
 ## Features
 
@@ -20,7 +20,7 @@ Can be called within the CLI as:
 ```bash
 speed 100
 ```
-If the value exceeds the maxium value of that type it is reverted to `0`. For example:
+If the value exceeds the maximum value of that type it is reverted to `0`. For example:
 ```bash
 speed 90000 # Returns 0 (as int has a max value of 32767)
 ```
@@ -32,7 +32,7 @@ void enable(){ motor_on = true; }
 void set_direction(float _direction){ direction = _direction; }
 void set_speed(int _speed){ speed = _speed; }
 ...
-cli->add_argument("enable", "Turn on motor", enable); // void CLI arguement (accepts no value)
+cli->add_argument("enable", "Turn on motor", enable); // void CLI argument (accepts no value)
 cli->add_argument<int>("speed", "Set motor speed", set_speed);
 cli->add_argument<float>("direction", "Set compass direction", set_direction);
 ```
