@@ -4,7 +4,7 @@ Arduino ecosystem command line argument parser (CLAP).
 ## Features
 A simple header only CLI to set random function values on the fly.
 - Small implementation (500b to 1kb).
-- Automatically coverts the CLI arguments to their type so you don't have to do that yourself. 
+- Automatically coverts args to their respective type.
 - Supports multiple args on a single line.
 - Supports args in quotations.
 - Has an input range function, e.g. `speed range 0:100:500` (start:stop:interval)

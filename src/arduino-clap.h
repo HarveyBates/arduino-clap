@@ -3,18 +3,17 @@
 
 #include <Arduino.h>
 
-#define CLI_RANGE
+#define CLI_RANGE_LOOP
 
 static char cmd_buffer[100]{};
 
 class Arguments {
 public:
-    virtual ~Arguments() = default;
-    virtual void call_callback(const char* arg_val) = 0;
-
+    virtual void execute_callback(const char* arg_val) = 0;
     virtual const char* get_name() = 0;
     virtual uint8_t get_name_len() = 0;
     virtual const char* get_help() = 0;
+    virtual bool void_callback() = 0;
 };
 
 namespace ParseArg {
@@ -74,21 +73,21 @@ namespace ParseArg {
 }
 
 template <typename T>
-class Arg : public Arguments {
+class Argument : public Arguments {
     // Constants
-    static const uint8_t MAX_ARG_LEN        =   15;  // Arg name length
-    static const uint8_t MAX_HELP_LEN       =   50; // Help information length
+    static const uint8_t MAX_ARG_LEN        =   15;  // Argument name length
+    static const uint8_t MAX_HELP_LEN       =   75; // Help information length
     // Full name
     char name[MAX_ARG_LEN]{}; // Full name
     // Help information
     char help[MAX_HELP_LEN]{}; // Help information
+    bool void_cb = false;
 
 public:
-
     typedef void(*Callback)(T);
+    Callback callback = nullptr;
     // Command that has a callback function attached to it
-    Arg(const char* _name, const char* _help,
-        Callback cb) :  callback(cb) {
+    Argument(const char* _name, const char* _help, Callback cb) : callback(cb) {
         if(!validate_arg(_name, _help)) {
             return;
         }
@@ -96,16 +95,30 @@ public:
         strncpy(help, _help, MAX_HELP_LEN);
     }
 
-    Callback callback;
+    typedef void(*vCallback)();
+    vCallback vcallback = nullptr;
+    Argument(const char* _name, const char* _help, vCallback cb) : vcallback(cb) {
+        if(!validate_arg(_name, _help)) {
+            return;
+        }
+        void_cb = true;
+        strncpy(name, _name, MAX_ARG_LEN);
+        strncpy(help, _help, MAX_HELP_LEN);
+    }
 
-    void call_callback(const char* arg_val) override {
+    void execute_callback(const char* arg_val) override {
+        if(void_cb){
+            vcallback();
+            return;
+        }
         T value = ParseArg::type<T>(arg_val);
         callback(value);
     }
 
-    const char* get_name() override { return name; };
-    uint8_t get_name_len() override { return strlen(name); };
+    const char* get_name() override { return name; }
+    uint8_t get_name_len() override { return strlen(name); }
     const char* get_help() override { return help; }
+    bool void_callback() override { return void_cb; }
 
 private:
     // Ensure command name and help information are valid
@@ -121,7 +134,7 @@ class ArduinoCLI {
     Stream& stream;
     Arguments* args[10]{};
     uint8_t n_args = 0;
-    char help_buffer[75]{}; // Single line of help message
+    char help_buffer[100]{}; // Single line of help message
 public:
     explicit ArduinoCLI(Stream& _serial) : stream(_serial) {}
     ~ArduinoCLI() {
@@ -130,10 +143,16 @@ public:
         }
     }
 
-    template <typename T>
+    template <typename T = void>
     void add_argument(const char* name, const char* help,
-                      typename Arg<T>::Callback cb){
-        args[n_args++] = new Arg<T>(name, help, cb);
+                      void(*cb)(T)){
+        args[n_args++] = new Argument<T>(name, help, cb);
+    }
+
+    template <typename T = uint8_t>
+    void add_argument(const char* name, const char* help,
+                      void(*cb)()){
+        args[n_args++] = new Argument<T>(name, help, cb);
     }
 
     typedef enum {
@@ -144,6 +163,7 @@ public:
         CLI_EXPECTED_VALUE_NOT_FOUND,
     } CLI_Status;
 
+private:
     void handle_error(const char* input, CLI_Status status) {
         switch(status){
             case CLI_OK:
@@ -162,18 +182,37 @@ public:
 
     void help(){
         stream.println("OPTIONS:");
-        memset(help_buffer, 0, sizeof(help_buffer));
         for(uint8_t i = 0; i < n_args; i++){
-            snprintf(help_buffer, sizeof(help_buffer), "\t%-20s%-50s",
-                     args[i]->get_name(),
-                     args[i]->get_help());
-            stream.println(help_buffer);
-            memset(help_buffer, 0, sizeof(help_buffer));
+            inbuilt_help(args[i]->get_name(), args[i]->get_help());
         }
+        stream.println("HELPERS:");
+        inbuilt_help("help", "Print out help information.");
+#ifdef CLI_RANGE_LOOP
+        inbuilt_help("range", "Execute function with values within a range "
+                              "(start:stop:interval_ms).");
+        inbuilt_help("loop", "Execute function in loop with values "
+                              "(start:stop:interval_ms).");
+        inbuilt_help("stop", "Stop range or loop function.");
+#endif // CLI_RANGE_LOOP
+        inbuilt_help("exit", "Exit CLI cleanly.");
     }
 
-    #ifdef CLI_RANGE
-    CLI_Status parse_range(char* input, Arguments* arg){
+    void inbuilt_help(const char* _name, const char* _help){
+        snprintf(help_buffer, sizeof(help_buffer), "\t%-20s%-80s",
+                 _name, _help);
+        stream.println(help_buffer);
+        memset(help_buffer, 0, sizeof(help_buffer));
+    }
+
+#ifdef CLI_RANGE_LOOP
+    CLI_Status parse_range_loop(char* input, Arguments* arg){
+
+        bool _range = true;
+
+        if(strcmp("loop", input) == 0){
+            _range = false;
+        }
+
         input = strtok(nullptr, " ");
 
         if(!input){
@@ -195,17 +234,63 @@ public:
             return CLI_ERROR;
         }
 
-        char range_buf[6]{};
-        for(int32_t i = start; i <= stop; i++){
-            snprintf(range_buf, sizeof(range_buf), "%ld", i);
-            arg->call_callback(range_buf);
-            memset(range_buf, 0, sizeof(range_buf));
-            delay(interval);
+        if(_range){
+            cb_range(arg, start, stop, interval);
+        } else {
+            cb_loop(arg, start, stop, interval);
         }
 
         return CLI_OK;
     }
-    #endif
+
+    void cb_range(Arguments* arg, int32_t start, int32_t stop,
+                         uint32_t interval){
+        char range_buf[6]{};
+        for(int32_t i = start; i <= stop; i++){
+            if(range_loop_exit()){
+                return;
+            }
+            snprintf(range_buf, sizeof(range_buf), "%ld", i);
+            arg->execute_callback(range_buf);
+            memset(range_buf, 0, sizeof(range_buf));
+            delay(interval);
+        }
+
+    }
+
+    void cb_loop(Arguments* arg, int32_t start, int32_t stop,
+                 uint32_t interval) {
+        char range_buf[6]{};
+        while (true) {
+            for (int32_t i = start; i <= stop; i++) {
+                if(range_loop_exit()) { return; }
+                snprintf(range_buf, sizeof(range_buf), "%ld", i);
+                arg->execute_callback(range_buf);
+                memset(range_buf, 0, sizeof(range_buf));
+                delay(interval);
+            }
+            for (int32_t i = stop-1; i >= start+1; i--) {
+                if(range_loop_exit()){ return; }
+                snprintf(range_buf, sizeof(range_buf), "%ld", i);
+                arg->execute_callback(range_buf);
+                memset(range_buf, 0, sizeof(range_buf));
+                delay(interval);
+            }
+        }
+    }
+
+    bool range_loop_exit(){
+        if(stream.available()){
+            stream.readBytesUntil('\n', cmd_buffer, sizeof(cmd_buffer)-1);
+            cmd_buffer[strcspn(cmd_buffer, "\r\n")] = '\0';
+            if(strcmp("stop", cmd_buffer) == 0){
+                return true;
+            }
+        }
+        return false;
+    }
+#endif // CLI_RANGE_LOOP
+
 
     CLI_Status scan_arg(char* input){
         if(!input){
@@ -218,9 +303,13 @@ public:
             return CLI_HELP_OK;
         }
 
-
         for(uint8_t i = 0; i < n_args; i++){
             if(strcmp(args[i]->get_name(), input) == 0){
+                if(args[i]->void_callback()){
+                    args[i]->execute_callback(input);
+                    return CLI_OK;
+                }
+
                 if(input[args[i]->get_name_len() - 1] == ':'){
                     input = strtok(nullptr, "\"");
                 } else {
@@ -231,13 +320,13 @@ public:
                     handle_error(input, CLI_EXPECTED_VALUE_NOT_FOUND);
                 }
 
-                #ifdef CLI_RANGE
-                if(strcmp("range", input) == 0){
-                    return parse_range(input, args[i]);
+                #ifdef CLI_RANGE_LOOP
+                if(strcmp("range", input) == 0 || strcmp("loop", input) == 0){
+                    return parse_range_loop(input, args[i]);
                 }
                 #endif
 
-                args[i]->call_callback(input);
+                args[i]->execute_callback(input);
                 return CLI_OK;
             }
         }
@@ -268,6 +357,16 @@ public:
         return false;
     }
 
+    bool exit(const char* input){
+        if(strcmp("exit", input) == 0){
+            stream.println("Exited command line.");
+            return true;
+        }
+        return false;
+    }
+
+public:
+
     void enter(){
         stream.print("$ ");
         bool exit = false;
@@ -280,14 +379,6 @@ public:
             }
             delay(1);
         }
-    }
-
-    bool exit(const char* input){
-        if(strcmp("exit", input) == 0){
-            stream.println("Exited command line.");
-            return true;
-        }
-        return false;
     }
 };
 

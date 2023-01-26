@@ -1,7 +1,7 @@
 #include <arduino-clap.h>
 
 // Setup command objects
-Arg* echo_commands;
+Argument* echo_commands;
 
 // Setup command line interface objects
 ArduinoCLI* cli;
@@ -18,7 +18,7 @@ void setup(){
     cli = new ArduinoCLI(Serial);
 
     // New echo command
-    echo_commands = new Arg("echo", "Echo user input", echo, true);
+    echo_commands = new Argument("echo", "Echo user input", echo, true);
 
     // Add "echo" command to cli
     cli->add_command(echo_commands);
