@@ -55,7 +55,7 @@ echo: "Hello World!"
 ```
 
 ### Inbuilt Arduino Helpers
-Two helper functions are provided, `range` and `loop`. These are for integer types only. The command `stop` can be used to stop a `range` or `loop` function.
+Three helper functions are provided, `range` `loop` and `array`. The first two are for integer types only (`array` accepts floats and doubles). The command `stop` can be used to stop a `range` or `loop` function.
 #### Range
 Executes a function with values provided between a range with spacing set by an interval. For example:
 ```c++
@@ -75,6 +75,14 @@ Based on the same example a in the `range` function, the `loop` function will co
 speed loop 0:100:500
 ```
 This will call the `update_speed()` function with the values 0 to 100 then 100 to 0 with a new call every 500 ms.
+
+#### Array
+The `array` function as the name suggests takes an array of abritraty values and passes them to a function sequentially, spaced by a user defined interval. 
+```bash
+speed array 1000:[10, 2, 3, 81, 77] // Using ints
+direction array 1000:[8.2, 71.3, 110.1, 22.6] // Using floats or doubles
+```
+The above example will pass the values found in the `[]` to the "speed" callback function with a delay of 1000 ms between each call.
 
 ## Example
 ```c++
