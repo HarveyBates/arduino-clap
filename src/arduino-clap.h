@@ -46,6 +46,7 @@ public:
     virtual bool void_callback() = 0;
 };
 
+
 /**
  * @brief Namespace to store conversions from const char* to various types.
  *
@@ -114,6 +115,7 @@ namespace ParseArg {
         return (int8_t)v;
     }
 }
+
 
 /**
  * @brief Command line argument.
@@ -224,6 +226,7 @@ private:
     }
 };
 
+
 /**
  * @brief Arduino command line interface that parses user input.
  * @note Maximum number of arguments is 10.
@@ -237,6 +240,13 @@ class ArduinoCLI {
     uint8_t n_args = 0;
     //! Buffer to hold a single line of a help message (see `help()`)
     char help_buffer[100]{};
+#ifdef CLI_RANGE_LOOP
+    //! Buffer to hold values that are passed to the inbuilt `array` function
+    char* arr_buffer[20]{};
+    //! Index within array buffer
+    uint8_t arr_buffer_index = 0;
+#endif
+
 public:
     /**
      * @brief Constructor for ArduinoCLI.
@@ -321,27 +331,29 @@ private:
     }
 
     /**
-     * @brief Prints out help information for all arguments and
-     * helper functions.
+     * @brief Prints out help information for all arguments and helper
+     * functions.
      */
     void help(){
         stream.println("OPTIONS:");
         for(uint8_t i = 0; i < n_args; i++){
-            inbuilt_help(args[i]->get_name(), args[i]->get_help());
+            print_help_line(args[i]->get_name(), args[i]->get_help());
         }
         stream.println("HELPERS:");
-        inbuilt_help("help", "Print out help information.");
+        print_help_line("help", "Print out help information.");
 #ifdef CLI_RANGE_LOOP
-        inbuilt_help("range", "Execute function with values within a range "
-                              "(start:stop:interval_ms).");
-        inbuilt_help("loop", "Execute function in loop with values "
-                              "(start:stop:interval_ms).");
-        inbuilt_help("stop", "Stop range or loop function.");
+        print_help_line("range", "Execute function with values within a range "
+                                 "(start:stop:interval_ms).");
+        print_help_line("loop", "Execute function in loop with values "
+                                "(start:stop:interval_ms).");
+        print_help_line("array", "Execute function with values provided in "
+                                 "array (interval:[v1, v2...]).");
+        print_help_line("stop", "Stop loop or array function.");
 #endif // CLI_RANGE_LOOP
-        inbuilt_help("exit", "Exit CLI cleanly.");
+        print_help_line("exit", "Exit CLI cleanly.");
     }
 
-    void inbuilt_help(const char* _name, const char* _help){
+    void print_help_line(const char* _name, const char* _help){
         snprintf(help_buffer, sizeof(help_buffer), "\t%-20s%-80s",
                  _name, _help);
         stream.println(help_buffer);
@@ -392,9 +404,9 @@ private:
         }
 
         if(_range){
-            cb_range(arg, start, stop, interval);
+            execute_range_fn(arg, start, stop, interval);
         } else {
-            cb_loop(arg, start, stop, interval);
+            execute_loop_fn(arg, start, stop, interval);
         }
 
         return CLI_OK;
@@ -412,8 +424,8 @@ private:
      * @param stop Value at end of range.
      * @param interval Interval between start and stop increments.
      */
-    void cb_range(Arguments* arg, int32_t start, int32_t stop,
-                         uint32_t interval){
+    void execute_range_fn(Arguments* arg, int32_t start, int32_t stop,
+                          uint32_t interval){
         char range_buf[6]{};
         for(int32_t i = start; i <= stop; i++){
             if(range_loop_exit()){
@@ -440,8 +452,8 @@ private:
      * @param stop Value at end of range.
      * @param interval Interval between start and stop increments.
      */
-    void cb_loop(Arguments* arg, int32_t start, int32_t stop,
-                 uint32_t interval) {
+    void execute_loop_fn(Arguments* arg, int32_t start, int32_t stop,
+                         uint32_t interval) {
         char range_buf[6]{};
         while (true) {
             for (int32_t i = start; i <= stop; i++) {
@@ -462,6 +474,92 @@ private:
     }
 
     /**
+     * @brief Strip non-digit character from a character array.
+     *
+     * An example being "[8" would be striped to "8". The negative symbol `-`
+     * and the '.' character are ignored. For example, the `input` of "[-50.1]"
+     * would result in "-50.1".
+     *
+     * @param input Character array to have its non-digit characters removed.
+     * @return Character array with digits only (and `-` or `.`).
+     */
+    static char* strip_non_digits(char* input){
+        char* dest = input;
+        char* src = input;
+        while(*src){
+            if(isdigit(*src) || *src == '-' || *src == '.') {
+                *dest++ = *src++;
+            } else {
+                src++;
+            }
+        }
+        *dest = '\0';
+        return input;
+    }
+
+    /**
+     * @brief Parses the inbuilt `array` command into its tokens.
+     *
+     * The inbuilt `array` command allows the user to trigger a function with
+     * a set of random values (provided by the user) in succession. The user
+     * prefixes the random values with an interval which is used to break
+     * up each command by that interval.
+     *
+     * @example
+     * cmd-to-execute array interval:[v1, v2, v3 ...].
+     *
+     * @param input Command from user as parsed by the CLI.
+     * @param arg Argument to execute using values in array and interval.
+     * @return CLI status.
+     */
+    CLI_Status parse_array_cmd(char* input, Arguments* arg){
+        if(!input){ return CLI_ERROR; }
+
+        memset(arr_buffer, 0, sizeof(arr_buffer));
+        arr_buffer_index = 0;
+
+        // Extract interval between each array value
+        input = strtok(nullptr, ":");
+
+        if(!input){
+            handle_error(input, CLI_EXPECTED_VALUE_NOT_FOUND);
+            return CLI_EXPECTED_VALUE_NOT_FOUND;
+        }
+
+        uint32_t interval = ParseArg::type<uint32_t>(input);
+
+        input = strtok(nullptr, ",");
+
+        while(input){
+            char* raw_value = strip_non_digits(input);
+            arr_buffer[arr_buffer_index++] = raw_value;
+            input = strtok(nullptr, ",");
+        }
+
+        execute_array_fn(arg, interval);
+
+        return CLI_OK;
+    }
+
+    /**
+     * @brief Executes inbuilt `array` command using values that were parsed in
+     * the `parse_array_cmd()`.
+     *
+     * The user can type `stop` to halt the execution of this function at any
+     * time.
+     *
+     * @param arg Argument with callback function to execute.
+     * @param interval Interval between each callback function.
+     */
+    void execute_array_fn(Arguments* arg, uint32_t interval) {
+        for(uint8_t i = 0; i < arr_buffer_index; i++){
+            if(range_loop_exit()){ return; }
+            arg->execute_callback(arr_buffer[i]);
+            delay(interval);
+        }
+    }
+
+    /**
      * @brief Checks if the user has supplied a `stop` command when in a
      * `loop` function.
      * @return Has the user entered stop?
@@ -477,7 +575,6 @@ private:
         return false;
     }
     #endif // CLI_RANGE_LOOP
-
 
     /**
      * @brief Finds matches to user input and arguments and executes the
@@ -524,6 +621,9 @@ private:
                 #ifdef CLI_RANGE_LOOP
                 if(strcmp("range", input) == 0 || strcmp("loop", input) == 0){
                     return parse_range_loop(input, args[i]);
+                }
+                if(strcmp("array", input) == 0){
+                    return parse_array_cmd(input, args[i]);
                 }
                 #endif
 
