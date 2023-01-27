@@ -1,7 +1,4 @@
-#include <arduino-clap.h>
-
-// Setup command objects
-Argument* echo_commands;
+#include <arduino_clap.h>
 
 // Setup command line interface objects
 ArduinoCLI* cli;
@@ -12,22 +9,17 @@ void echo(const char* input){
 
 void setup(){
     Serial.begin(115200);
-    pinMode(BUILTIN_LED, OUTPUT);
 
     // Pass the serial object into the CLI
     cli = new ArduinoCLI(Serial);
 
     // New echo command
-    echo_commands = new Argument("echo", "Echo user input", echo, true);
-
-    // Add "echo" command to cli
-    cli->add_command(echo_commands);
+    cli->add_argument<const char*>("echo:", "Echo user input.", echo);
 
     // Enter the CLI
     cli->enter();
 
-    free(echo_commands);
-    free(cli);
+    // echo: "Hello World!"
 }
 
 void loop(){
