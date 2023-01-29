@@ -41,9 +41,8 @@ class Arguments {
 public:
     virtual void execute_callback(const char* arg_val) = 0;
     virtual const char* get_name() = 0;
-    virtual uint8_t get_name_len() = 0;
     virtual const char* get_help() = 0;
-    virtual bool void_callback() = 0;
+    virtual bool is_void_function() = 0;
 };
 
 
@@ -137,49 +136,42 @@ class Argument : public Arguments {
     static const uint8_t MAX_HELP_LEN   =   75;    //! Help information length
     char name[MAX_ARG_LEN]{};    //! Argument name
     char help[MAX_HELP_LEN]{};   //! Help information
-    bool void_cb = false;        //! Does the callback expect a value?
+    bool void_function = false;
 
-    //! Callback function that takes a value of type T
-    typedef void(*Callback)(T);
-    //! Callback function that does not take a value (void)
-    typedef void(*vCallback)();
 public:
     //! Reference to a callback function that takes a value
-    Callback callback = nullptr;
+    void(*callback)() = nullptr;
+    void(*callback_t)(T) = nullptr;
 
     /**
-     * @breif Argument constructor that accepts a callback with a value of type
-     * T.
-     *
-     * @param _name Name of the argument that can be called from the cmd line.
-     * @param _help Help message when the user types `help` in the cmd line.
-     * @param cb Function that accepts a value.
-     */
-    Argument(const char* _name, const char* _help, Callback cb) : callback(cb) {
-        if(!validate_arg(_name, _help)) {
-            return;
-        }
-        strncpy(name, _name, MAX_ARG_LEN);
-        strncpy(help, _help, MAX_HELP_LEN);
-    }
-
-    //! Reference to a callback function that does not take a value
-    vCallback vcallback = nullptr;
-
-    /**
-     * @breif Argument constructor that does not accept a value.
+     * @breif Several argument constructors are provided, accepting a various
+     * number of values.
      *
      * @param _name Name of the argument that can be called from the cmd line.
      * @param _help Help message when the user types `help` in the cmd line.
      * @param cb Function that does not accept a value.
      */
-    Argument(const char* _name, const char* _help, vCallback cb) : vcallback(cb) {
-        if(!validate_arg(_name, _help)) {
+    Argument(const char* _name, const char* _help, void(*cb)()) : callback(cb) {
+        void_function = true;
+        if(!build_arg(_name, _help)){
             return;
         }
-        void_cb = true;
+    }
+
+    //! An argument that accepts one value
+    Argument(const char* _name, const char* _help, void(*cb)(T)) : callback_t(cb) {
+        if(!build_arg(_name, _help)){
+            return;
+        }
+    }
+
+    bool build_arg(const char* _name, const char* _help){
+        if(!validate_arg(_name, _help)) {
+            return false;
+        }
         strncpy(name, _name, MAX_ARG_LEN);
         strncpy(help, _help, MAX_HELP_LEN);
+        return true;
     }
 
     /**
@@ -193,22 +185,22 @@ public:
      * @param arg_val Argument value provided by user in CLI.
      */
     void execute_callback(const char* arg_val) override {
-        if(void_cb){
-            vcallback();
+        // Callback with no value
+        if(void_function){
+            callback();
             return;
         }
-        T value = ParseArg::type<T>(arg_val);
-        callback(value);
+        // Callback with a value type
+        T v1 = ParseArg::type<T>(arg_val);
+        callback_t(v1);
     }
 
     //! Get the name of the argument
     const char* get_name() override { return name; }
-    //! Get the length of the name (used for finding `:` at end of name)
-    uint8_t get_name_len() override { return strlen(name); }
     //! Get help information for argument
     const char* get_help() override { return help; }
-    //! Check if the callback function expects no value
-    bool void_callback() override { return void_cb; }
+    //! Check if the function has value
+    bool is_void_function() override { return void_function; }
 
 private:
     /**
@@ -238,6 +230,10 @@ class ArduinoCLI {
     Arguments* args[10]{};
     //! Number of stored command line arguments
     uint8_t n_args = 0;
+    //! Collection of command line argument sub arguments
+    //Arguments* sub_args[5]{};
+    ////! Number of stored command line sub arguments
+    //uint8_t n_sub_args = 0;
     //! Buffer to hold a single line of a help message (see `help()`)
     char help_buffer[100]{};
 #ifdef CLI_RANGE_LOOP
@@ -267,25 +263,6 @@ public:
     /**
      * @brief Add argument to CLI.
      *
-     * @note This method accepts a type that is passed to the callback
-     * function.
-     *
-     * @tparam T Type of value passed to callback function.
-     * @param name Name of argument.
-     * @param help Help information surrounding argument.
-     * @param cb Callback function that accepts a value of type T.
-     */
-    template <typename T = void>
-    void add_argument(const char* name, const char* help,
-                      void(*cb)(T)){
-        args[n_args++] = new Argument<T>(name, help, cb);
-    }
-
-    /**
-     * @brief Add argument to CLI.
-     *
-     * @note This method is for callback functions that accept no value.
-     *
      * @tparam T Dummy template (not used, or required by user).
      * @param name Name of argument.
      * @param help Help information surrounding argument.
@@ -294,7 +271,13 @@ public:
     template <typename T = uint8_t>
     void add_argument(const char* name, const char* help,
                       void(*cb)()){
-        args[n_args++] = new Argument<T>(name, help, cb);
+        args[n_args++] = new Argument<T>(name, help, cb); // No values (void)
+    }
+
+    template <typename T>
+    void add_argument(const char* name, const char* help,
+                      void(*cb)(T)){
+        args[n_args++] = new Argument<T>(name, help, cb); // One value
     }
 
     /**
@@ -576,6 +559,22 @@ private:
     }
     #endif // CLI_RANGE_LOOP
 
+    static char* get_next_value(char* input){
+        // Peek input to see if it is wrapped in quotations
+        input = strtok(nullptr, "");
+        if(!input){
+            return input;
+        }
+
+        if(input[0] == '\"'){
+            input = strtok(input, "\"");
+        } else {
+            input = strtok(input, " ");
+        }
+
+        return input;
+    }
+
     /**
      * @brief Finds matches to user input and arguments and executes the
      * required functions based on the input provided.
@@ -601,23 +600,21 @@ private:
 
         for(uint8_t i = 0; i < n_args; i++){
             if(strcmp(args[i]->get_name(), input) == 0){
-                if(args[i]->void_callback()){
+                // Void argument, trigger callback with no values
+                if(args[i]->is_void_function()){
                     args[i]->execute_callback(input);
                     return CLI_OK;
                 }
 
-                // If the argument name ends with `:` its value
-                // should be in quotations.
-                if(input[args[i]->get_name_len() - 1] == ':'){
-                    input = strtok(nullptr, "\"");
-                } else {
-                    input = strtok(nullptr, " ");
-                }
+                // Get the arguments next value
+                input = get_next_value(input);
 
                 if(!input){
                     handle_error(input, CLI_EXPECTED_VALUE_NOT_FOUND);
+                    return CLI_EXPECTED_VALUE_NOT_FOUND;
                 }
 
+                // Check to see if it is a special value
                 #ifdef CLI_RANGE_LOOP
                 if(strcmp("range", input) == 0 || strcmp("loop", input) == 0){
                     return parse_range_loop(input, args[i]);

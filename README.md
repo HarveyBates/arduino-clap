@@ -42,16 +42,19 @@ enable speed 150 direction 98.2
 ```
 
 ### Space delimited strings
-Strings can be incased in quotations if the commands has the suffix `:`. For example:
+Character arrays can be surrounded in quotes if they have spaces or alone if a single 
+phrase is used. For example:
 ```c++
 void echo(const char* msg) { Serial.println(msg); }
 ...
-cli->add_argument<const char*>("echo:", "Echo user input", echo);
+cli->add_argument<const char*>("echo", "Echo user input", echo);
 ```
 Within the CLI:
 ```bash
-echo: "Hello World!"
-# Hello World!
+echo "Hello World!"
+# Output = Hello World!
+echo Hello 
+# Output = Hello
 ```
 
 ### Inbuilt Arduino Helpers
@@ -101,7 +104,7 @@ void setup(){
     servo.attach(9);
    
     cli = new ArduinoCLI(Serial);
-    cli->add_argument<const char*>("echo:", "Echo user input.", echo);
+    cli->add_argument<const char*>("echo", "Echo user input.", echo);
     cli->add_argument<int>("motor-speed", "Set motor speed.", set_motor_speed);
     cli->add_argument<int>("servo-angle", "Set servo angle.", [](int a){ servo.write(a); }); // Non-static
     cli->enter();
@@ -120,7 +123,7 @@ The example above has an inbuilt help function.
 ```
 $ help
 OPTIONS:
-	echo:               Echo user input.                                                 
+	echo                Echo user input.                                                 
 	motor-speed         Set motor speed.
 	servo-angle.        Set servo angle.
 HELPERS:
